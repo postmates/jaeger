@@ -22,19 +22,28 @@ import (
 )
 
 const (
-	gRPCPrefix        = "reporter.grpc."
-	collectorHostPort = gRPCPrefix + "host-port"
+	gRPCPrefix             = "reporter.grpc."
+	collectorHostPort      = gRPCPrefix + "host-port"
+	collectorTLS           = gRPCPrefix + "tls"
+	collectorTLSCA         = gRPCPrefix + "tls.ca"
+	collectorTLSServerName = gRPCPrefix + "tls.server-name"
 )
 
 // Options Struct to hold configurations
 type Options struct {
 	// CollectorHostPort is list of host:port Jaeger Collectors.
 	CollectorHostPort []string
+	TLS               bool
+	TLSCA             string
+	TLSServerName     string
 }
 
 // AddFlags adds flags for Options.
 func AddFlags(flags *flag.FlagSet) {
 	flags.String(collectorHostPort, "", "(experimental) Comma-separated string representing host:port of a static list of collectors to connect to directly.")
+	flags.Bool(collectorTLS, false, "(experimental) Enable TLS.")
+	flags.String(collectorTLSCA, "", "(experimental) Path to a TLS CA file. (default use the systems truststore)")
+	flags.String(collectorTLSServerName, "", "(experimental) Override the TLS server name.")
 }
 
 // InitFromViper initializes Options with properties retrieved from Viper.
@@ -43,5 +52,9 @@ func (o *Options) InitFromViper(v *viper.Viper) *Options {
 	if hostPorts != "" {
 		o.CollectorHostPort = strings.Split(hostPorts, ",")
 	}
+
+	o.TLS = v.GetBool(collectorTLS)
+	o.TLSCA = v.GetString(collectorTLSCA)
+	o.TLSServerName = v.GetString(collectorTLSServerName)
 	return o
 }

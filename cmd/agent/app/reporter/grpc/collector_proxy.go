@@ -15,12 +15,14 @@
 package grpc
 
 import (
+	"crypto/x509"
 	"errors"
 
 	"github.com/uber/jaeger-lib/metrics"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/balancer/roundrobin"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"
 
@@ -41,6 +43,28 @@ func NewCollectorProxy(o *Options, mFactory metrics.Factory, logger *zap.Logger)
 	if len(o.CollectorHostPort) == 0 {
 		return nil, errors.New("could not create collector proxy, address is missing")
 	}
+
+	var dialOption grpc.DialOption
+	if o.TLS { // user requested a secure connection
+		var creds credentials.TransportCredentials
+		if len(o.TLSCA) == 0 { // no truststore given, use SystemCertPool
+			pool, err := x509.SystemCertPool()
+			if err != nil {
+				return nil, err
+			}
+			creds = credentials.NewClientTLSFromCert(pool, o.TLSServerName)
+		} else { // setup user specified truststore
+			var err error
+			creds, err = credentials.NewClientTLSFromFile(o.TLSCA, o.TLSServerName)
+			if err != nil {
+				return nil, err
+			}
+		}
+		dialOption = grpc.WithTransportCredentials(creds)
+	} else { // insecure connection
+		dialOption = grpc.WithInsecure()
+	}
+
 	var conn *grpc.ClientConn
 	if len(o.CollectorHostPort) > 1 {
 		r, _ := manual.GenerateAndRegisterManualResolver()
@@ -49,10 +73,10 @@ func NewCollectorProxy(o *Options, mFactory metrics.Factory, logger *zap.Logger)
 			resolvedAddrs = append(resolvedAddrs, resolver.Address{Addr: addr})
 		}
 		r.InitialAddrs(resolvedAddrs)
-		conn, _ = grpc.Dial(r.Scheme()+":///round_robin", grpc.WithInsecure(), grpc.WithBalancerName(roundrobin.Name))
+		conn, _ = grpc.Dial(r.Scheme()+":///round_robin", grpc.WithBalancerName(roundrobin.Name), dialOption)
 	} else {
 		// It does not return error if the collector is not running
-		conn, _ = grpc.Dial(o.CollectorHostPort[0], grpc.WithInsecure())
+		conn, _ = grpc.Dial(o.CollectorHostPort[0], dialOption)
 	}
 	grpcMetrics := mFactory.Namespace(metrics.NSOptions{Name: "", Tags: map[string]string{"protocol": "grpc"}})
 	return &ProxyBuilder{
