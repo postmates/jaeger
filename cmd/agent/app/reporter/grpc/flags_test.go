@@ -24,13 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBingFlags(t *testing.T) {
+func TestBindFlags(t *testing.T) {
 	v := viper.New()
-	command := cobra.Command{}
-	flags := &flag.FlagSet{}
-	AddFlags(flags)
-	command.PersistentFlags().AddGoFlagSet(flags)
-	v.BindPFlags(command.PersistentFlags())
 
 	tests := []struct {
 		cOpts    []string
@@ -40,8 +35,16 @@ func TestBingFlags(t *testing.T) {
 			expected: &Options{CollectorHostPort: []string{"localhost:1111"}}},
 		{cOpts: []string{"--reporter.grpc.host-port=localhost:1111,localhost:2222"},
 			expected: &Options{CollectorHostPort: []string{"localhost:1111", "localhost:2222"}}},
+		{cOpts: []string{"--reporter.grpc.tls", "--reporter.grpc.tls.ca=/tmp/myca", "--reporter.grpc.tls.server-name=testserver"},
+			expected: &Options{TLS: true, TLSCA: "/tmp/myca", TLSServerName: "testserver"}},
 	}
 	for _, test := range tests {
+		command := cobra.Command{}
+		flags := &flag.FlagSet{}
+		AddFlags(flags)
+		command.PersistentFlags().AddGoFlagSet(flags)
+		v.BindPFlags(command.PersistentFlags())
+
 		err := command.ParseFlags(test.cOpts)
 		require.NoError(t, err)
 		b := new(Options).InitFromViper(v)

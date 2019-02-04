@@ -22,9 +22,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uber/jaeger-lib/metrics"
+	"github.com/uber/jaeger-lib/metrics/metricstest"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"github.com/uber/jaeger-lib/metrics/metricstest"
 
 	"github.com/jaegertracing/jaeger/proto-gen/api_v2"
 	"github.com/jaegertracing/jaeger/thrift-gen/jaeger"
@@ -37,13 +37,44 @@ func TestProxyBuilderMissingAddress(t *testing.T) {
 }
 
 func TestProxyBuilder(t *testing.T) {
-	proxy, err := NewCollectorProxy(&Options{CollectorHostPort: []string{"localhost:0000"}}, metrics.NullFactory, zap.NewNop())
-	require.NoError(t, err)
-	require.NotNil(t, proxy)
-	assert.NotNil(t, proxy.GetReporter())
-	assert.NotNil(t, proxy.GetManager())
-	assert.Nil(t, proxy.Close())
-	assert.EqualError(t, proxy.Close(), "rpc error: code = Canceled desc = grpc: the client connection is closing")
+	tests := []struct {
+		name         string
+		proxyOptions *Options
+		proxyBuilderFails bool
+	}{
+		{
+			name:         "with insecure grpc connection",
+			proxyOptions: &Options{CollectorHostPort: []string{"localhost:0000"}},
+			proxyBuilderFails: false,
+		},
+		{
+			name:         "with secure grpc connection",
+			proxyOptions: &Options{CollectorHostPort: []string{"localhost:0000"}, TLS: true},
+			proxyBuilderFails: false,
+		},
+		{
+			name:         "with secure grpc connection and own CA",
+			proxyOptions: &Options{CollectorHostPort: []string{"localhost:0000"}, TLS: true, TLSCA: "/tmp/testca"},
+			proxyBuilderFails: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			proxy, err := NewCollectorProxy(test.proxyOptions, metrics.NullFactory, zap.NewNop())
+			if !test.proxyBuilderFails {
+				require.NoError(t, err)
+				require.NotNil(t, proxy)
+				assert.NotNil(t, proxy.GetReporter())
+				assert.NotNil(t, proxy.GetManager())
+				assert.Nil(t, proxy.Close())
+				assert.EqualError(t, proxy.Close(), "rpc error: code = Canceled desc = grpc: the client connection is closing")
+			} else {
+				require.Error(t,err)
+				require.Nil(t,proxy)
+			}
+		})
+	}
 }
 
 func TestMultipleCollectors(t *testing.T) {
