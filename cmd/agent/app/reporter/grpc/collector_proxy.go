@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"
+	"github.com/sercand/kuberesolver"
 
 	"github.com/jaegertracing/jaeger/cmd/agent/app/configmanager"
 	grpcManager "github.com/jaegertracing/jaeger/cmd/agent/app/configmanager/grpc"
@@ -66,6 +67,10 @@ func NewCollectorProxy(o *Options, mFactory metrics.Factory, logger *zap.Logger)
 	}
 
 	var conn *grpc.ClientConn
+	var err error
+
+	kuberesolver.RegisterInCluster()
+
 	if len(o.CollectorHostPort) > 1 {
 		r, _ := manual.GenerateAndRegisterManualResolver()
 		var resolvedAddrs []resolver.Address
@@ -73,11 +78,16 @@ func NewCollectorProxy(o *Options, mFactory metrics.Factory, logger *zap.Logger)
 			resolvedAddrs = append(resolvedAddrs, resolver.Address{Addr: addr})
 		}
 		r.InitialAddrs(resolvedAddrs)
-		conn, _ = grpc.Dial(r.Scheme()+":///round_robin", grpc.WithBalancerName(roundrobin.Name), dialOption)
+		conn, err = grpc.Dial(r.Scheme()+":///round_robin", grpc.WithBalancerName(roundrobin.Name), dialOption)
 	} else {
 		// It does not return error if the collector is not running
-		conn, _ = grpc.Dial(o.CollectorHostPort[0], dialOption)
+		conn, err = grpc.Dial(o.CollectorHostPort[0], grpc.WithBalancerName(roundrobin.Name), dialOption)
 	}
+
+	if err != nil {
+		return nil, err
+	}
+
 	grpcMetrics := mFactory.Namespace(metrics.NSOptions{Name: "", Tags: map[string]string{"protocol": "grpc"}})
 	return &ProxyBuilder{
 		conn:     conn,
