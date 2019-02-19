@@ -1,0 +1,114 @@
+workspace:
+  base: /go
+  path: src/github.com/jaegertracing/jaeger
+
+clone:
+  git:
+    image: plugins/git
+    recursive: true
+
+pipeline:
+  "build and test":
+    image: library/golang:1.11
+    commands:
+      - mkdir -p /go/bin
+      - apt-get update
+      - apt-get install -qfy git make curl
+      - curl -sSL https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+      - dep ensure
+      - make test
+      - make build-binaries-linux
+
+  "build UI":
+    image: library/golang:1.11
+    commands:
+      - apt-get update && apt-get -qfy install apt-transport-https
+      - curl -sSL https://deb.nodesource.com/setup_11.x | bash -
+      - curl -sSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
+      - echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list
+      - apt-get update && apt-get -qfy install nodejs yarn make bzip2
+      - make build_ui
+
+  "docker build jaeger-cassandra-schema":
+    image: plugins/docker
+    registry: quay.io
+    repo: quay.io/postmates/jaeger-cassandra-schema
+    context: plugin/storage/cassandra
+    dockerfile: plugin/storage/cassandra/Dockerfile
+    tags:
+      - ${DRONE_BRANCH//\//-}
+    secrets:
+      - source: global_quay_username
+        target: docker_username
+      - source: global_quay_password
+        target: docker_password
+
+  "docker build jaeger-agent":
+    image: plugins/docker
+    registry: quay.io
+    repo: quay.io/postmates/jaeger-agent
+    context: cmd/agent
+    dockerfile: cmd/agent/Dockerfile
+    tags:
+      - ${DRONE_BRANCH//\//-}
+    secrets:
+      - source: global_quay_username
+        target: docker_username
+      - source: global_quay_password
+        target: docker_password
+
+  "docker build jaeger-collector":
+    image: plugins/docker
+    registry: quay.io
+    repo: quay.io/postmates/jaeger-collector
+    context: cmd/collector
+    dockerfile: cmd/collector/Dockerfile
+    tags:
+      - ${DRONE_BRANCH//\//-}
+    secrets:
+      - source: global_quay_username
+        target: docker_username
+      - source: global_quay_password
+        target: docker_password
+
+  "docker build jaeger-query":
+    image: plugins/docker
+    registry: quay.io
+    repo: quay.io/postmates/jaeger-query
+    context: cmd/query
+    dockerfile: cmd/query/Dockerfile
+    tags:
+      - ${DRONE_BRANCH//\//-}
+    secrets:
+      - source: global_quay_username
+        target: docker_username
+      - source: global_quay_password
+        target: docker_password
+
+  "docker build jaeger-ingester":
+    image: plugins/docker
+    registry: quay.io
+    repo: quay.io/postmates/jaeger-ingester
+    context: cmd/ingester
+    dockerfile: cmd/ingester/Dockerfile
+    tags:
+      - ${DRONE_BRANCH//\//-}
+    secrets:
+      - source: global_quay_username
+        target: docker_username
+      - source: global_quay_password
+        target: docker_password
+
+  "docker build jaeger-es-indices-clean":
+    image: plugins/docker
+    registry: quay.io
+    repo: quay.io/postmates/jaeger-es-index-cleaner
+    context: plugin/storage/es
+    dockerfile: plugin/storage/es/Dockerfile
+    tags:
+      - ${DRONE_BRANCH//\//-}
+    secrets:
+      - source: global_quay_username
+        target: docker_username
+      - source: global_quay_password
+        target: docker_password
