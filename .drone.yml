@@ -8,16 +8,14 @@ clone:
     recursive: true
 
 pipeline:
-  "build and test":
+  "run tests":
     image: library/golang:1.11
     commands:
       - mkdir -p /go/bin
-      - apt-get update
-      - apt-get install -qfy git make curl
+      - apt-get update && apt-get install -qfy git make curl
       - curl -sSL https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
       - dep ensure
       - make test
-      - make build-binaries-linux
 
   "build UI":
     image: library/golang:1.11
@@ -28,6 +26,12 @@ pipeline:
       - echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list
       - apt-get update && apt-get -qfy install nodejs yarn make bzip2
       - make build_ui
+
+  "build binaries":
+    image: library/golang:1.11
+    commands:
+      - apt-get update && apt-get install -qfy make
+      - make build-binaries-linux
 
   "docker build jaeger-cassandra-schema":
     image: plugins/docker
